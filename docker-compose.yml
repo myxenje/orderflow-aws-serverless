@@ -1,0 +1,16 @@
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: orderflow-dynamodb
+    command: "-jar DynamoDBLocal.jar -sharedDb"
+    working_dir: /home/dynamodblocal
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+  sqs-local:
+    image: softwaremill/elasticmq-native:latest
+    container_name: orderflow-sqs
+    ports:
+      - "9324:9324"
+      - "9325:9325"
+    restart: unless-stopped
