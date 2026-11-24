@@ -1,12 +1,5 @@
 import boto3
-
-from src.shared.config.settings import (
-    AWS_REGION,
-    AWS_ACCESS_KEY_ID,
-    AWS_SECRET_ACCESS_KEY,
-)
-
-SQS_ENDPOINT = "http://localhost:9324"
+from src.shared.config.settings import (AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, SQS_ENDPOINT,)
 
 
 def get_sqs_client():

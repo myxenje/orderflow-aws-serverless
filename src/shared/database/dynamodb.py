@@ -1,5 +1,4 @@
 import boto3
-
 from boto3.dynamodb.types import TypeSerializer
 from src.shared.config.settings import (
     AWS_REGION,

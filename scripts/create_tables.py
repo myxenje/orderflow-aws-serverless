@@ -116,7 +116,37 @@ def create_processed_events_table():
 
     print("Tabela ProcessedEvents criada com sucesso!")
 
+def create_invoices_table():
+    dynamodb = get_dynamodb_resource()
+
+    existing_tables = dynamodb.meta.client.list_tables()["TableNames"]
+
+    if "Invoices" in existing_tables:
+        print("A tabela Invoices já existe.")
+        return
+
+    dynamodb.create_table(
+        TableName="Invoices",
+        KeySchema=[
+            {
+                "AttributeName": "order_id",
+                "KeyType": "HASH"
+            }
+        ],
+        AttributeDefinitions=[
+            {
+                "AttributeName": "order_id",
+                "AttributeType": "S"
+            }
+        ],
+        BillingMode="PAY_PER_REQUEST"
+    )
+
+    print("Tabela Invoices criada com sucesso!")
+
+
 if __name__ == "__main__":
     create_orders_table()
     create_outbox_table()
     create_processed_events_table()
+    create_invoices_table()

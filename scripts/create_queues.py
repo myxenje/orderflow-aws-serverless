@@ -36,6 +36,23 @@ def create_order_reserved_queue():
     return create_queue("order-reserved")
 
 
+def create_order_paid_queue():
+    return create_queue("order-paid")
+
+
+def create_order_invoiced_queue():
+    return create_queue("order-invoiced")
+
+def create_order_refund_requested_queue():
+    return create_queue("order-refund-requested")
+
+def create_order_refunded_queue():
+    return create_queue("order-refunded")
+
 if __name__ == "__main__":
     create_order_processing_queue()
     create_order_reserved_queue()
+    create_order_paid_queue()
+    create_order_invoiced_queue()
+    create_order_refund_requested_queue()
+    create_order_refunded_queue()

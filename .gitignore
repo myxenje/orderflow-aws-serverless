@@ -13,3 +13,7 @@ htmlcov/
 cdk.out/
 .DS_Store
 Thumbs.db
+event-filter.json
+expression-names.json
+expression-values.json
+key.json
