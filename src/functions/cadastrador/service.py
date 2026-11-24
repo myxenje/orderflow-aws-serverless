@@ -1,8 +1,11 @@
+import json
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
 
+from src.shared.config.settings import SQS_QUEUE_URL
 from src.shared.database.dynamodb import get_dynamodb_resource
+from src.shared.events.sqs import send_message
 
 
 def create_order(order_data):
@@ -63,5 +66,20 @@ def create_order(order_data):
     table = dynamodb.Table("Orders")
 
     table.put_item(Item=order)
+
+    # Publicação do evento no SQS
+    message = {
+        "event_type": "ORDER_CREATED",
+        "order_id": order["order_id"],
+        "customer_id": order["customer_id"],
+        "total_amount": str(order["total_amount"]),
+        "status": order["status"],
+        "created_at": order["created_at"]
+    }
+
+    send_message(
+        queue_url=SQS_QUEUE_URL,
+        message_body=json.dumps(message)
+    )
 
     return order
