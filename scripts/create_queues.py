@@ -1,10 +1,8 @@
 from src.shared.events.sqs import get_sqs_client
 
 
-def create_order_processing_queue():
+def create_queue(queue_name):
     sqs = get_sqs_client()
-
-    queue_name = "order-processing"
 
     existing_queues = sqs.list_queues().get("QueueUrls", [])
 
@@ -30,5 +28,14 @@ def create_order_processing_queue():
     return queue_url
 
 
+def create_order_processing_queue():
+    return create_queue("order-processing")
+
+
+def create_order_reserved_queue():
+    return create_queue("order-reserved")
+
+
 if __name__ == "__main__":
     create_order_processing_queue()
+    create_order_reserved_queue()

@@ -1,13 +1,9 @@
 import json
-from unittest.mock import patch
-
 from src.functions.cadastrador.service import create_order
 from src.shared.database.dynamodb import get_dynamodb_resource
-from src.shared.config.settings import SQS_QUEUE_URL
 
 
-@patch("src.functions.cadastrador.service.send_message")
-def test_create_order(mock_send_message):
+def test_create_order():
     order_data = {
         "customer_id": "customer-001",
         "items": [
@@ -26,32 +22,49 @@ def test_create_order(mock_send_message):
 
     order = create_order(order_data)
 
-    # Valida os dados do pedido
     assert order["order_id"]
     assert order["customer_id"] == "customer-001"
     assert order["status"] == "PENDING"
     assert order["total_amount"] == 130
 
-    # Confirma que o pedido foi salvo no DynamoDB
-    table = get_dynamodb_resource().Table("Orders")
-    response = table.get_item(
+    dynamodb = get_dynamodb_resource()
+
+    # Verifica se o pedido foi salvo
+    orders_table = dynamodb.Table("Orders")
+    order_response = orders_table.get_item(
         Key={"order_id": order["order_id"]}
     )
 
-    assert "Item" in response
-    assert response["Item"]["customer_id"] == "customer-001"
+    assert "Item" in order_response
+    assert order_response["Item"]["customer_id"] == "customer-001"
 
-    # Confirma que o evento foi enviado ao SQS
-    mock_send_message.assert_called_once()
+    # Verifica se o evento foi salvo na Outbox
+    outbox_table = dynamodb.Table("Outbox")
+    outbox_response = outbox_table.scan(
+        FilterExpression="#status = :status",
+        ExpressionAttributeNames={
+            "#status": "status"
+        },
+        ExpressionAttributeValues={
+            ":status": "PENDING"
+        }
+    )
 
-    call_args = mock_send_message.call_args.kwargs
+    matching_events = [
+        event for event in outbox_response["Items"]
+        if json.loads(event["payload"])["order_id"] == order["order_id"]
+    ]
 
-    assert call_args["queue_url"] == SQS_QUEUE_URL
+    assert len(matching_events) == 1
 
-    message = json.loads(call_args["message_body"])
+    event = matching_events[0]
+
+    assert event["event_type"] == "ORDER_CREATED"
+    assert event["status"] == "PENDING"
+
+    message = json.loads(event["payload"])
 
     assert message["event_type"] == "ORDER_CREATED"
     assert message["order_id"] == order["order_id"]
     assert message["customer_id"] == "customer-001"
     assert message["total_amount"] == "130.00"
-    assert message["status"] == "PENDING"

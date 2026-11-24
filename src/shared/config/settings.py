@@ -14,7 +14,12 @@ DYNAMODB_ENDPOINT = os.getenv(
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "local")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "local")
 
-SQS_QUEUE_URL = os.getenv(
-    "SQS_QUEUE_URL",
+SQS_ORDER_CREATED_QUEUE_URL = os.getenv(
+    "SQS_ORDER_CREATED_QUEUE_URL",
     "http://localhost:9324/000000000000/order-processing"
+)
+
+SQS_ORDER_RESERVED_QUEUE_URL = os.getenv(
+    "SQS_ORDER_RESERVED_QUEUE_URL",
+    "http://localhost:9324/000000000000/order-reserved"
 )

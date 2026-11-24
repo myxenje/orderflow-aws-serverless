@@ -1,5 +1,4 @@
 import json
-
 from src.functions.cadastrador.service import create_order
 
 

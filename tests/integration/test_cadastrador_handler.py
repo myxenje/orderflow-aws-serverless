@@ -1,5 +1,4 @@
 import json
-
 from src.functions.cadastrador.handler import lambda_handler
 
 
