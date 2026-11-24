@@ -13,10 +13,10 @@ def lambda_handler(event, context):
         if not isinstance(body, dict):
             raise ValueError("O corpo da requisição deve ser um objeto JSON.")
 
-        # Cria o pedido
+        # Cria pediido
         order = create_order(body)
 
-        # Retorna resposta HTTP
+        # Retorna Resposta HTTP
         return {
             "statusCode": 201,
             "headers": {
