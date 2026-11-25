@@ -8,3 +8,4 @@ COPY src/ ${LAMBDA_TASK_ROOT}/src/
 COPY docker/lambda-entrypoint.sh ${LAMBDA_TASK_ROOT}/lambda-entrypoint.sh
 RUN chmod +x ${LAMBDA_TASK_ROOT}/lambda-entrypoint.sh
 ENTRYPOINT ["/var/task/lambda-entrypoint.sh"]
+CMD ["src.functions.coletor.handler.lambda_handler"]

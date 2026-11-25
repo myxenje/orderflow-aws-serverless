@@ -1,4 +1,4 @@
 #!/bin/sh
 set -e
 
-exec /lambda-entrypoint.sh "$LAMBDA_HANDLER"
+exec /lambda-entrypoint.sh "$@"
