@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from boto3.dynamodb.conditions import Key
 from src.shared.database.dynamodb import get_dynamodb_resource
 from src.shared.events.sqs import send_message
-from src.shared.config.settings import (SQS_ORDER_CREATED_QUEUE_URL, SQS_ORDER_RESERVED_QUEUE_URL, SQS_ORDER_PAID_QUEUE_URL, SQS_ORDER_INVOICED_QUEUE_URL, SQS_ORDER_REFUNDED_QUEUE_URL,)
+from src.shared.config.settings import (SQS_ORDER_CREATED_QUEUE_URL, SQS_ORDER_RESERVED_QUEUE_URL, SQS_ORDER_PAID_QUEUE_URL, SQS_ORDER_INVOICED_QUEUE_URL, SQS_ORDER_REFUNDED_QUEUE_URL, SQS_ORDER_REFUND_REQUESTED_QUEUE_URL,)
 
 
 def publish_pending_events():
@@ -15,6 +15,7 @@ def publish_pending_events():
         "ORDER_PAID": SQS_ORDER_PAID_QUEUE_URL,
         "ORDER_INVOICED": SQS_ORDER_INVOICED_QUEUE_URL,
         "ORDER_REFUNDED": SQS_ORDER_REFUNDED_QUEUE_URL,
+        "ORDER_REFUND_REQUESTED": SQS_ORDER_REFUND_REQUESTED_QUEUE_URL,
     }
 
     published_count = 0
