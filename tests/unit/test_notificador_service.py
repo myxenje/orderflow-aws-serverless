@@ -8,16 +8,23 @@ from src.functions.notificador.service import notify_customer
 def dynamodb_mocks(monkeypatch):
     resource = MagicMock()
     processed_table = MagicMock()
+    sns_mock = MagicMock()
 
     resource.Table.return_value = processed_table
 
     monkeypatch.setattr(
         "src.functions.notificador.service.get_dynamodb_resource",
-        lambda: resource
+        lambda: resource,
+    )
+
+    monkeypatch.setattr(
+        "src.functions.notificador.service.publish_notification",
+        sns_mock,
     )
 
     return {
         "processed": processed_table,
+        "sns": sns_mock,
     }
 
 
@@ -53,6 +60,15 @@ def test_notify_customer_success(dynamodb_mocks, valid_event):
     assert notification["event_id"] == "event-001"
     assert notification["sent_at"]
 
+    mocks["sns"].assert_called_once()
+
+    sns_call = mocks["sns"].call_args.kwargs
+
+    assert sns_call["subject"] == "Pedido order-001 faturado com sucesso"
+    assert "Pedido: order-001" in sns_call["message"]
+    assert "Cliente: customer-001" in sns_call["message"]
+    assert "Nota fiscal: invoice-001" in sns_call["message"]
+
 
 def test_notify_customer_without_event_id(dynamodb_mocks, valid_event):
     event = {**valid_event, "event_id": ""}
@@ -61,6 +77,7 @@ def test_notify_customer_without_event_id(dynamodb_mocks, valid_event):
         notify_customer(event)
 
     dynamodb_mocks["processed"].put_item.assert_not_called()
+    dynamodb_mocks["sns"].assert_not_called()
 
 
 def test_notify_customer_without_order_id(dynamodb_mocks, valid_event):
@@ -70,6 +87,7 @@ def test_notify_customer_without_order_id(dynamodb_mocks, valid_event):
         notify_customer(event)
 
     dynamodb_mocks["processed"].put_item.assert_not_called()
+    dynamodb_mocks["sns"].assert_not_called()
 
 
 def test_notify_customer_invalid_event_type(dynamodb_mocks, valid_event):
@@ -79,6 +97,7 @@ def test_notify_customer_invalid_event_type(dynamodb_mocks, valid_event):
         notify_customer(event)
 
     dynamodb_mocks["processed"].put_item.assert_not_called()
+    dynamodb_mocks["sns"].assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -86,7 +105,7 @@ def test_notify_customer_invalid_event_type(dynamodb_mocks, valid_event):
     [
         ("customer_id", "customer_id"),
         ("invoice_id", "invoice_id"),
-    ]
+    ],
 )
 def test_notify_customer_missing_required_data(
     dynamodb_mocks, valid_event, field, message
@@ -97,6 +116,7 @@ def test_notify_customer_missing_required_data(
         notify_customer(event)
 
     dynamodb_mocks["processed"].put_item.assert_not_called()
+    dynamodb_mocks["sns"].assert_not_called()
 
 
 def test_notify_customer_duplicate_event(dynamodb_mocks, valid_event):
@@ -115,6 +135,7 @@ def test_notify_customer_duplicate_event(dynamodb_mocks, valid_event):
     assert result["order_id"] == "order-001"
 
     mocks["processed"].put_item.assert_not_called()
+    mocks["sns"].assert_not_called()
 
 
 def test_notify_customer_concurrent_duplicate_event(
@@ -130,7 +151,7 @@ def test_notify_customer_concurrent_duplicate_event(
                 "Message": "The conditional request failed",
             }
         },
-        "PutItem"
+        "PutItem",
     )
 
     result = notify_customer(valid_event)
@@ -139,3 +160,4 @@ def test_notify_customer_concurrent_duplicate_event(
     assert result["order_id"] == "order-001"
 
     mocks["processed"].put_item.assert_called_once()
+    mocks["sns"].assert_not_called()

@@ -4,6 +4,14 @@ from src.functions.notificador.service import notify_customer
 from src.shared.database.dynamodb import get_dynamodb_resource
 
 
+@pytest.fixture(autouse=True)
+def mock_sns(monkeypatch):
+    monkeypatch.setattr(
+        "src.functions.notificador.service.publish_notification",
+        lambda subject, message: {"MessageId": "test-message-id"},
+    )
+
+
 def create_event():
     event_id = str(uuid4())
 
@@ -26,7 +34,6 @@ def test_notify_customer_success():
     assert result["customer_id"] == event["customer_id"]
     assert result["invoice_id"] == event["invoice_id"]
 
-    # Verifica se o evento foi registrado no DynamoDB
     dynamodb = get_dynamodb_resource()
     table = dynamodb.Table("ProcessedEvents")
 
