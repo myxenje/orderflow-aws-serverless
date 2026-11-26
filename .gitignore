@@ -17,3 +17,12 @@ event-filter.json
 expression-names.json
 expression-values.json
 key.json
+order-key.json
+outbox-filter.json
+outbox-gsi.json
+test-message.json
+invoice-filter.json
+packaged.yaml
+.coverage
+.coverage.*
+htmlcov/
