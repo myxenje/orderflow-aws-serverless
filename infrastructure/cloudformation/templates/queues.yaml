@@ -1,0 +1,111 @@
+Description: >
+  Filas SQS OrderFlow
+
+Resources:
+
+  OrderDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: order-dlq
+      MessageRetentionPeriod: 1209600
+
+  OrderProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: order-processing
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt OrderDLQ.Arn
+        maxReceiveCount: 3
+
+  OrderReservedQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: order-reserved
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt OrderDLQ.Arn
+        maxReceiveCount: 3
+
+  OrderPaidQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: order-paid
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt OrderDLQ.Arn
+        maxReceiveCount: 3
+
+  OrderInvoicedQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: order-invoiced
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt OrderDLQ.Arn
+        maxReceiveCount: 3
+
+  OrderFailureQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: order-failure
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 345600
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt OrderDLQ.Arn
+        maxReceiveCount: 3
+
+Outputs:
+
+  OrderProcessingQueueArn:
+    Description: ARN da fila Pedido
+    Value: !GetAtt OrderProcessingQueue.Arn
+
+  OrderReservedQueueArn:
+    Description: ARN da fila Reservado
+    Value: !GetAtt OrderReservedQueue.Arn
+
+  OrderPaidQueueArn:
+    Description: ARN da fila Pago
+    Value: !GetAtt OrderPaidQueue.Arn
+
+  OrderInvoicedQueueArn:
+    Description: ARN da fila Faturado
+    Value: !GetAtt OrderInvoicedQueue.Arn
+
+  OrderFailureQueueArn:
+    Description: ARN da fila Falha
+    Value: !GetAtt OrderFailureQueue.Arn
+
+  OrderDLQArn:
+    Description: ARN da DLQ
+    Value: !GetAtt OrderDLQ.Arn
+
+  OrderProcessingQueueUrl:
+    Description: URL da fila Pedido
+    Value: !Ref OrderProcessingQueue
+
+  OrderReservedQueueUrl:
+    Description: URL da fila Reservado
+    Value: !Ref OrderReservedQueue
+
+  OrderPaidQueueUrl:
+    Description: URL da fila Pago
+    Value: !Ref OrderPaidQueue
+
+  OrderInvoicedQueueUrl:
+    Description: URL da fila Faturado
+    Value: !Ref OrderInvoicedQueue
+
+  OrderFailureQueueUrl:
+    Description: URL da fila Falha
+    Value: !Ref OrderFailureQueue

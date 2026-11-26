@@ -1,0 +1,69 @@
+Description: >
+  Stack principal da infra OrderFlow
+
+Parameters:
+
+  NotificationEmail:
+    Type: String
+    Description: Notificacoes OrderFlow via sns
+    
+Resources:
+
+  DatabaseStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./templates/database.yaml
+
+  QueuesStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./templates/queues.yaml
+
+  LambdasStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - DatabaseStack
+      - QueuesStack
+      - NotificationsStack     
+    Properties:
+      TemplateURL: ./templates/lambdas.yaml
+      Parameters:
+        OrdersTableArn: !GetAtt DatabaseStack.Outputs.OrdersTableArn
+        StockTableArn: !GetAtt DatabaseStack.Outputs.StockTableArn              
+        OutboxTableArn: !GetAtt DatabaseStack.Outputs.OutboxTableArn
+        OutboxStreamArn: !GetAtt DatabaseStack.Outputs.OutboxStreamArn
+        ProcessedEventsTableArn: !GetAtt DatabaseStack.Outputs.ProcessedEventsTableArn
+        InvoicesTableArn: !GetAtt DatabaseStack.Outputs.InvoicesTableArn
+        OrderProcessingQueueArn: !GetAtt QueuesStack.Outputs.OrderProcessingQueueArn
+        OrderReservedQueueArn: !GetAtt QueuesStack.Outputs.OrderReservedQueueArn
+        OrderPaidQueueArn: !GetAtt QueuesStack.Outputs.OrderPaidQueueArn
+        OrderInvoicedQueueArn: !GetAtt QueuesStack.Outputs.OrderInvoicedQueueArn
+        OrderFailureQueueArn: !GetAtt QueuesStack.Outputs.OrderFailureQueueArn
+        OrderProcessingQueueUrl: !GetAtt QueuesStack.Outputs.OrderProcessingQueueUrl
+        OrderReservedQueueUrl: !GetAtt QueuesStack.Outputs.OrderReservedQueueUrl
+        OrderPaidQueueUrl: !GetAtt QueuesStack.Outputs.OrderPaidQueueUrl
+        OrderInvoicedQueueUrl: !GetAtt QueuesStack.Outputs.OrderInvoicedQueueUrl
+        OrderFailureQueueUrl: !GetAtt QueuesStack.Outputs.OrderFailureQueueUrl
+        NotificationsTopicArn: !GetAtt NotificationsStack.Outputs.OrderNotificationsTopicArn
+
+  ApiStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn:
+      - LambdasStack
+    Properties:
+      TemplateURL: ./templates/api.yaml
+      Parameters:
+        CadastradorFunctionArn: !GetAtt LambdasStack.Outputs.CadastradorFunctionArn
+
+  NotificationsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./templates/notifications.yaml
+      Parameters:
+        NotificationEmail: !Ref NotificationEmail
+
+Outputs:
+
+  ApiEndpoint:
+    Description: Endpoint público da API OrderFlow
+    Value: !GetAtt ApiStack.Outputs.HttpApiEndpoint

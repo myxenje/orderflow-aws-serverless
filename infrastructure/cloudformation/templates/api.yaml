@@ -1,0 +1,74 @@
+Description: >
+  API Gateway HTTP API OrderFlow
+
+Parameters:
+  CadastradorFunctionArn:
+    Type: String
+
+Resources:
+
+  OrderFlowHttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: orderflow-http-api
+      ProtocolType: HTTP
+      Description: API HTTP do sistema OrderFlow
+
+  CadastradorIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref OrderFlowHttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationMethod: POST
+      IntegrationUri: !Ref CadastradorFunctionArn
+      PayloadFormatVersion: '2.0'
+
+  CreateOrderRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref OrderFlowHttpApi
+      RouteKey: 'POST /orders'
+      Target: !Sub 'integrations/${CadastradorIntegration}'
+
+  RefundOrderRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref OrderFlowHttpApi
+      RouteKey: 'POST /orders/{order_id}/refund'
+      Target: !Sub 'integrations/${CadastradorIntegration}'
+
+  DefaultStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref OrderFlowHttpApi
+      StageName: '$default'
+      AutoDeploy: true
+
+  CreateOrderInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CadastradorFunctionArn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub
+        - 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiId}/*/POST/orders'
+        - ApiId: !Ref OrderFlowHttpApi
+
+  RefundOrderInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref CadastradorFunctionArn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub
+        - 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiId}/*/POST/orders/*/refund'
+        - ApiId: !Ref OrderFlowHttpApi
+
+Outputs:
+  HttpApiId:
+    Description: ID da API Gateway HTTP API
+    Value: !Ref OrderFlowHttpApi
+
+  HttpApiEndpoint:
+    Description: Endpoint público da API OrderFlow
+    Value: !GetAtt OrderFlowHttpApi.ApiEndpoint

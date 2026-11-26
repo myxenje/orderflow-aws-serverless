@@ -1,0 +1,105 @@
+Description: >
+  Tabelas DynamoDB OrderFlow
+
+Resources:
+
+  OrdersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Orders
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: order_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: order_id
+          KeyType: HASH
+
+  StockTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Stock
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: product_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: product_id
+          KeyType: HASH
+
+  OutboxTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Outbox
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: event_id
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: created_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: event_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: StatusCreatedAtIndex
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: created_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+
+  ProcessedEventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ProcessedEvents
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: consumer_event_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: consumer_event_id
+          KeyType: HASH
+
+  InvoicesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Invoices
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: order_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: order_id
+          KeyType: HASH
+
+Outputs:
+
+  OrdersTableArn:
+    Description: ARN da tabela Orders
+    Value: !GetAtt OrdersTable.Arn
+
+  StockTableArn:
+    Description: ARN da tabela Stock
+    Value: !GetAtt StockTable.Arn
+
+  OutboxTableArn:
+    Description: ARN da tabela Outbox
+    Value: !GetAtt OutboxTable.Arn
+
+  OutboxStreamArn:
+    Description: ARN do DynamoDB Stream da tabela Outbox
+    Value: !GetAtt OutboxTable.StreamArn
+
+  ProcessedEventsTableArn:
+    Description: ARN da tabela ProcessedEvents
+    Value: !GetAtt ProcessedEventsTable.Arn
+
+  InvoicesTableArn:
+    Description: ARN da tabela Invoices
+    Value: !GetAtt InvoicesTable.Arn

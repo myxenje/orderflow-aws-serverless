@@ -1,0 +1,28 @@
+Description: >
+  Notificacoes de confirmacao via sns (futuramente sera implantado ses)
+
+Parameters:
+
+  NotificationEmail:
+    Type: String
+
+Resources:
+
+  OrderNotificationsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: orderflow-notifications
+      DisplayName: OrderFlow Notifications
+
+  OrderNotificationsEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref OrderNotificationsTopic
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+
+Outputs:
+
+  OrderNotificationsTopicArn:
+    Description: ARN do topico SNS de notificacoes
+    Value: !Ref OrderNotificationsTopic

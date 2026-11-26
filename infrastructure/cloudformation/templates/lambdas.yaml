@@ -1,0 +1,674 @@
+Description: >
+  Funcoes lambdas e permissoes OrderFlow
+
+Parameters:
+
+  OrdersTableArn:
+    Type: String
+
+  StockTableArn:
+    Type: String
+
+  OutboxTableArn:
+    Type: String
+
+  OutboxStreamArn:
+    Type: String
+
+  ProcessedEventsTableArn:
+    Type: String
+
+  InvoicesTableArn:
+    Type: String
+
+  OrderProcessingQueueArn:
+    Type: String
+
+  OrderReservedQueueArn:
+    Type: String
+
+  OrderPaidQueueArn:
+    Type: String
+
+  OrderInvoicedQueueArn:
+    Type: String
+
+  OrderFailureQueueArn:
+    Type: String
+
+  OrderProcessingQueueUrl:
+    Type: String
+
+  OrderReservedQueueUrl:
+    Type: String
+
+  OrderPaidQueueUrl:
+    Type: String
+
+  OrderInvoicedQueueUrl:
+    Type: String
+
+  OrderFailureQueueUrl:
+    Type: String
+
+  NotificationsTopicArn:
+    Type: String    
+
+Resources:
+
+  CadastradorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: orderflow-cadastrador
+      PackageType: Image
+      Code:
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/orderflow-lambda:cadastrador'
+      Role: !GetAtt CadastradorRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Architectures:
+        - x86_64
+
+  ColetorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: orderflow-coletor
+      PackageType: Image
+      Code:
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/orderflow-lambda:coletor'
+      Role: !GetAtt ColetorRole.Arn
+      Timeout: 60
+      MemorySize: 256
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          SQS_ORDER_CREATED_QUEUE_URL: !Ref OrderProcessingQueueUrl
+
+  ReservadorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: orderflow-reservador
+      PackageType: Image
+      Code:
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/orderflow-lambda:reservador'
+      Role: !GetAtt ReservadorRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          SQS_ORDER_RESERVED_QUEUE_URL: !Ref OrderReservedQueueUrl
+
+  PagadorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: orderflow-pagador
+      PackageType: Image
+      Code:
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/orderflow-lambda:pagador'
+      Role: !GetAtt PagadorRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          SQS_ORDER_PAID_QUEUE_URL: !Ref OrderPaidQueueUrl
+          SQS_ORDER_FAILURE_QUEUE_URL: !Ref OrderFailureQueueUrl
+  FaturadorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: orderflow-faturador
+      PackageType: Image
+      Code:
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/orderflow-lambda:faturador'
+      Role: !GetAtt FaturadorRole.Arn
+      Environment:
+        Variables:
+          SQS_ORDER_INVOICED_QUEUE_URL: !Ref OrderInvoicedQueueUrl
+      Timeout: 30
+      MemorySize: 256
+      Architectures:
+        - x86_64
+
+  EstornadorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: orderflow-estornador
+      PackageType: Image
+      Code:
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/orderflow-lambda:estornador'
+      Role: !GetAtt EstornadorRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Architectures:
+        - x86_64
+
+  NotificadorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: orderflow-notificador
+      PackageType: Image
+      Code:
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/orderflow-lambda:notificador'
+      Role: !GetAtt NotificadorRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: !Ref NotificationsTopicArn        
+
+  ReservadorEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !Ref OrderProcessingQueueArn
+      FunctionName: !GetAtt ReservadorFunction.Arn
+      BatchSize: 10
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+      Enabled: true
+
+  PagadorEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !Ref OrderReservedQueueArn
+      FunctionName: !GetAtt PagadorFunction.Arn
+      BatchSize: 10
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+      Enabled: true
+
+  FaturadorEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !Ref OrderPaidQueueArn
+      FunctionName: !GetAtt FaturadorFunction.Arn
+      BatchSize: 10
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+      Enabled: true
+
+  EstornadorEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !Ref OrderFailureQueueArn
+      FunctionName: !GetAtt EstornadorFunction.Arn
+      BatchSize: 10
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+      Enabled: true
+
+  NotificadorEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !Ref OrderInvoicedQueueArn
+      FunctionName: !GetAtt NotificadorFunction.Arn
+      BatchSize: 10
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+      Enabled: true
+
+  ColetorOutboxStreamMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !Ref OutboxStreamArn
+      FunctionName: !GetAtt ColetorFunction.Arn
+      StartingPosition: LATEST
+      BatchSize: 10
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+      FilterCriteria:
+        Filters:
+          - Pattern: '{"eventName":["INSERT"],"dynamodb":{"NewImage":{"event_type":{"S":["ORDER_CREATED"]}}}}'
+      Enabled: true
+
+  CadastradorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: orderflow-cadastrador-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CadastradorCloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub '${CadastradorLogGroup.Arn}:*'
+        - PolicyName: CadastradorDynamoDBPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:TransactWriteItems
+                Resource: !Ref OrdersTableArn
+
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:TransactWriteItems
+                Resource: !Ref OutboxTableArn
+
+  ColetorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: orderflow-coletor-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ColetorCloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub '${ColetorLogGroup.Arn}:*'
+        - PolicyName: ColetorSQSSendPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !Ref OrderProcessingQueueArn
+        - PolicyName: ColetorDynamoDBStreamPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:DescribeStream
+                  - dynamodb:GetRecords
+                  - dynamodb:GetShardIterator
+                Resource: !Ref OutboxStreamArn
+              - Effect: Allow
+                Action:
+                  - dynamodb:ListStreams
+                Resource: !Sub '${OutboxTableArn}/stream/*'
+
+  ReservadorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: orderflow-reservador-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ReservadorCloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub '${ReservadorLogGroup.Arn}:*'
+        - PolicyName: ReservadorSQSConsumePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:ChangeMessageVisibility
+                Resource: !Ref OrderProcessingQueueArn
+        - PolicyName: ReservadorSQSSendPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !Ref OrderReservedQueueArn
+        - PolicyName: ReservadorDynamoDBPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource:
+                  - !Ref OrdersTableArn
+                  - !Ref ProcessedEventsTableArn
+                  - !Ref OutboxTableArn
+              - Effect: Allow
+                Action:
+                  - dynamodb:UpdateItem
+                Resource: !Ref OrdersTableArn
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                Resource:
+                  - !Ref ProcessedEventsTableArn
+                  - !Ref OutboxTableArn
+              - Effect: Allow
+                Action:
+                  - dynamodb:TransactWriteItems
+                Resource:
+                  - !Ref OrdersTableArn
+                  - !Ref ProcessedEventsTableArn
+                  - !Ref OutboxTableArn
+
+  PagadorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: orderflow-pagador-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: PagadorCloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub '${PagadorLogGroup.Arn}:*'
+        - PolicyName: PagadorSQSConsumePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:ChangeMessageVisibility
+                Resource: !Ref OrderReservedQueueArn
+        - PolicyName: PagadorDynamoDBPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource:
+                  - !Ref OrdersTableArn
+                  - !Ref ProcessedEventsTableArn
+                  - !Ref OutboxTableArn
+              - Effect: Allow
+                Action:
+                  - dynamodb:UpdateItem
+                Resource:
+                  - !Ref OrdersTableArn
+                  - !Ref StockTableArn       
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                Resource:
+                  - !Ref ProcessedEventsTableArn
+                  - !Ref OutboxTableArn
+              - Effect: Allow
+                Action:
+                  - dynamodb:TransactWriteItems
+                Resource:
+                  - !Ref OrdersTableArn
+                  - !Ref ProcessedEventsTableArn
+                  - !Ref OutboxTableArn
+                  - !Ref StockTableArn                  
+        - PolicyName: PagadorSQSSendPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !Ref OrderPaidQueueArn
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !Ref OrderFailureQueueArn
+
+  FaturadorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: orderflow-faturador-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FaturadorCloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub '${FaturadorLogGroup.Arn}:*'
+        - PolicyName: FaturadorSQSConsumePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:ChangeMessageVisibility
+                Resource: !Ref OrderPaidQueueArn
+        - PolicyName: FaturadorSQSSendPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                Resource: !Ref OrderInvoicedQueueArn
+        - PolicyName: FaturadorDynamoDBPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:UpdateItem
+                  - dynamodb:GetItem
+                Resource: !Ref OrdersTableArn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                Resource: !Ref InvoicesTableArn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                Resource: !Ref ProcessedEventsTableArn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                Resource: !Ref OutboxTableArn
+
+  EstornadorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: orderflow-estornador-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: EstornadorCloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub '${EstornadorLogGroup.Arn}:*'
+        - PolicyName: EstornadorSQSConsumePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:ChangeMessageVisibility
+                Resource: !Ref OrderFailureQueueArn
+        - PolicyName: EstornadorDynamoDBPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource:
+                  - !Ref OrdersTableArn
+                  - !Ref ProcessedEventsTableArn
+              - Effect: Allow
+                Action:
+                  - dynamodb:UpdateItem
+                Resource: !Ref StockTableArn                  
+              - Effect: Allow
+                Action:
+                  - dynamodb:TransactWriteItems
+                Resource:
+                  - !Ref OrdersTableArn
+                  - !Ref ProcessedEventsTableArn
+                  - !Ref OutboxTableArn
+                  - !Ref StockTableArn                 
+
+  NotificadorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: orderflow-notificador-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: NotificadorCloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub '${NotificadorLogGroup.Arn}:*'
+        - PolicyName: NotificadorSQSConsumePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:ChangeMessageVisibility
+                Resource: !Ref OrderInvoicedQueueArn
+        - PolicyName: NotificadorDynamoDBPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                Resource: !Ref ProcessedEventsTableArn
+        - PolicyName: NotificadorSNSPublishPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref NotificationsTopicArn                
+
+
+  CadastradorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/orderflow-cadastrador
+      RetentionInDays: 14
+
+  ColetorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/orderflow-coletor
+      RetentionInDays: 14
+
+  ReservadorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/orderflow-reservador
+      RetentionInDays: 14
+
+  PagadorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/orderflow-pagador
+      RetentionInDays: 14
+
+  FaturadorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/orderflow-faturador
+      RetentionInDays: 14
+
+  EstornadorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/orderflow-estornador
+      RetentionInDays: 14
+
+  NotificadorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/orderflow-notificador
+      RetentionInDays: 14
+
+Outputs:
+
+  CadastradorFunctionArn:
+    Description: ARN da Lambda Cadastrador
+    Value: !GetAtt CadastradorFunction.Arn
