@@ -1,0 +1,103 @@
+name: OrderFlow CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: orderflow-lambda
+  STACK_NAME: orderflow-stack
+  TEMPLATE_BUCKET: ${{ secrets.TEMPLATE_BUCKET }}
+
+jobs:
+  ci:
+    name: Tests and validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest -v
+
+      - name: Validate CloudFormation templates
+        run: |
+          pip install cfn-lint
+          cfn-lint infrastructure/cloudformation/*.yaml
+          cfn-lint infrastructure/cloudformation/templates/*.yaml
+
+  deploy:
+    name: Deploy to AWS
+    needs: ci
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Lambda images
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
+
+          for FUNCTION in cadastrador coletor reservador pagador faturador estornador notificador
+          do
+            docker build \
+              -f docker/Dockerfile.lambda \
+              --build-arg LAMBDA_HANDLER="src.functions.${FUNCTION}.handler.lambda_handler" \
+              -t "${ECR_URI}:${IMAGE_TAG}-${FUNCTION}" \
+              .
+
+            docker push "${ECR_URI}:${IMAGE_TAG}-${FUNCTION}"
+          done
+
+      - name: Package CloudFormation templates
+        run: |
+          aws cloudformation package \
+            --template-file infrastructure/cloudformation/main.yaml \
+            --s3-bucket "${TEMPLATE_BUCKET}" \
+            --s3-prefix orderflow \
+            --output-template-file packaged.yaml
+
+      - name: Deploy CloudFormation stack
+        run: |
+          aws cloudformation deploy \
+            --template-file packaged.yaml \
+            --stack-name "${STACK_NAME}" \
+            --role-arn "${{ secrets.CLOUDFORMATION_ROLE_ARN }}" \
+            --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND \
+            --parameter-overrides \
+              NotificationEmail="${{ secrets.NOTIFICATION_EMAIL }}" \
+              ImageTag="${{ github.sha }}"
