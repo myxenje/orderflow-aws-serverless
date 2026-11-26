@@ -42,14 +42,16 @@ jobs:
 
           for FUNCTION in cadastrador coletor reservador pagador faturador estornador notificador
           do
-            docker build \
+            docker buildx build \
+              --platform linux/amd64 \
+              --provenance=false \
+              --push \
               -f docker/Dockerfile.lambda \
               --build-arg LAMBDA_HANDLER="src.functions.${FUNCTION}.handler.lambda_handler" \
               -t "${ECR_URI}:${IMAGE_TAG}-${FUNCTION}" \
               .
-
-            docker push "${ECR_URI}:${IMAGE_TAG}-${FUNCTION}"
           done
+
       - name: Package CloudFormation templates
         run: |
           aws cloudformation package \
@@ -57,6 +59,7 @@ jobs:
             --s3-bucket "${TEMPLATE_BUCKET}" \
             --s3-prefix orderflow \
             --output-template-file packaged.yaml
+
       - name: Deploy CloudFormation stack
         run: |
           aws cloudformation deploy \
