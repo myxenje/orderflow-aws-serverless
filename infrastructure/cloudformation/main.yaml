@@ -7,6 +7,10 @@ Parameters:
     Type: String
     Description: Notificacoes OrderFlow via sns
     
+  ImageTag:
+    Type: String
+    Description: Tag das imagens Docker das Lambdas    
+
 Resources:
 
   DatabaseStack:
@@ -45,6 +49,7 @@ Resources:
         OrderInvoicedQueueUrl: !GetAtt QueuesStack.Outputs.OrderInvoicedQueueUrl
         OrderFailureQueueUrl: !GetAtt QueuesStack.Outputs.OrderFailureQueueUrl
         NotificationsTopicArn: !GetAtt NotificationsStack.Outputs.OrderNotificationsTopicArn
+        ImageTag: !Ref ImageTag
 
   ApiStack:
     Type: AWS::CloudFormation::Stack

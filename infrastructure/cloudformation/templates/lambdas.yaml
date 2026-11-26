@@ -3,6 +3,9 @@ Description: >
 
 Parameters:
 
+  ImageTag:
+    Type: String
+
   OrdersTableArn:
     Type: String
 
@@ -62,7 +65,7 @@ Resources:
       FunctionName: orderflow-cadastrador
       PackageType: Image
       Code:
-        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/orderflow-lambda:cadastrador'
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/orderflow-lambda:${ImageTag}-cadastrador'
       Role: !GetAtt CadastradorRole.Arn
       Timeout: 30
       MemorySize: 256
@@ -75,7 +78,7 @@ Resources:
       FunctionName: orderflow-coletor
       PackageType: Image
       Code:
-        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/orderflow-lambda:coletor'
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/orderflow-lambda:${ImageTag}-coletor'
       Role: !GetAtt ColetorRole.Arn
       Timeout: 60
       MemorySize: 256
@@ -91,7 +94,7 @@ Resources:
       FunctionName: orderflow-reservador
       PackageType: Image
       Code:
-        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/orderflow-lambda:reservador'
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/orderflow-lambda:${ImageTag}-reservador'
       Role: !GetAtt ReservadorRole.Arn
       Timeout: 30
       MemorySize: 256
@@ -107,7 +110,7 @@ Resources:
       FunctionName: orderflow-pagador
       PackageType: Image
       Code:
-        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/orderflow-lambda:pagador'
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/orderflow-lambda:${ImageTag}-pagador'
       Role: !GetAtt PagadorRole.Arn
       Timeout: 30
       MemorySize: 256
@@ -123,7 +126,7 @@ Resources:
       FunctionName: orderflow-faturador
       PackageType: Image
       Code:
-        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/orderflow-lambda:faturador'
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/orderflow-lambda:${ImageTag}-faturador'
       Role: !GetAtt FaturadorRole.Arn
       Environment:
         Variables:
@@ -139,7 +142,7 @@ Resources:
       FunctionName: orderflow-estornador
       PackageType: Image
       Code:
-        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/orderflow-lambda:estornador'
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/orderflow-lambda:${ImageTag}-estornador'
       Role: !GetAtt EstornadorRole.Arn
       Timeout: 30
       MemorySize: 256
@@ -152,7 +155,7 @@ Resources:
       FunctionName: orderflow-notificador
       PackageType: Image
       Code:
-        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.us-east-1.amazonaws.com/orderflow-lambda:notificador'
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/orderflow-lambda:${ImageTag}-notificador'
       Role: !GetAtt NotificadorRole.Arn
       Timeout: 30
       MemorySize: 256
