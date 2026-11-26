@@ -26,3 +26,5 @@ packaged.yaml
 .coverage
 .coverage.*
 htmlcov/
+main-packaged.yaml
+packaged-template.yaml
