@@ -22,6 +22,19 @@ jobs:
     name: Tests and validation
     runs-on: ubuntu-latest
 
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local:latest
+        ports:
+          - 8000:8000
+
+    env:
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      DYNAMODB_ENDPOINT: http://localhost:8000
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,6 +49,23 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Wait for DynamoDB Local
+        run: |
+          python -c "
+          import socket
+          import time
+
+          for attempt in range(30):
+              try:
+                  with socket.create_connection(('localhost', 8000), timeout=2):
+                      print('DynamoDB Local is ready.')
+                      break
+              except OSError:
+                  time.sleep(2)
+          else:
+              raise SystemExit('DynamoDB Local did not start.')
+          "
+
       - name: Run tests
         run: python -m pytest -v
 
@@ -44,6 +74,7 @@ jobs:
           pip install cfn-lint
           cfn-lint infrastructure/cloudformation/*.yaml
           cfn-lint infrastructure/cloudformation/templates/*.yaml
+
 
   deploy:
     name: Deploy to AWS
