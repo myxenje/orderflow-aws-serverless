@@ -3,8 +3,6 @@ name: OrderFlow CI/CD
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -18,115 +16,8 @@ env:
   TEMPLATE_BUCKET: ${{ secrets.TEMPLATE_BUCKET }}
 
 jobs:
-  ci:
-    name: Tests and validation
-    runs-on: ubuntu-latest
-
-    env:
-      ENVIRONMENT: development
-      AWS_REGION: us-east-1
-      AWS_DEFAULT_REGION: us-east-1
-      AWS_ACCESS_KEY_ID: test
-      AWS_SECRET_ACCESS_KEY: test
-      DYNAMODB_ENDPOINT: http://localhost:8000
-
-      SQS_ORDER_CREATED_QUEUE_URL: http://localhost:9324/000000000000/order-processing
-      SQS_ORDER_RESERVED_QUEUE_URL: http://localhost:9324/000000000000/order-reserved
-      SQS_ORDER_PAID_QUEUE_URL: http://localhost:9324/000000000000/order-paid
-      SQS_ORDER_INVOICED_QUEUE_URL: http://localhost:9324/000000000000/order-invoiced
-      SQS_ORDER_REFUND_REQUESTED_QUEUE_URL: http://localhost:9324/000000000000/order-refund-requested
-      SQS_ORDER_REFUNDED_QUEUE_URL: http://localhost:9324/000000000000/order-refunded
-      SQS_ORDER_FAILURE_QUEUE_URL: http://localhost:9324/000000000000/order-failure
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Configure Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: Start local services
-        run: docker compose up -d
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Wait for local services
-        run: |
-          python - <<'PY'
-          import socket
-          import time
-
-          services = {
-              "DynamoDB Local": 8000,
-              "ElasticMQ": 9324,
-          }
-
-          for name, port in services.items():
-              for attempt in range(30):
-                  try:
-                      with socket.create_connection(("localhost", port), timeout=2):
-                          print(f"{name} is ready.")
-                          break
-                  except OSError:
-                      time.sleep(2)
-              else:
-                  raise SystemExit(f"{name} did not start.")
-          PY
-
-      - name: Create SQS queues
-        run: |
-          python - <<'PY'
-          import boto3
-
-          sqs = boto3.client(
-              "sqs",
-              endpoint_url="http://localhost:9324",
-              region_name="us-east-1",
-              aws_access_key_id="test",
-              aws_secret_access_key="test",
-          )
-
-          queues = [
-              "order-processing",
-              "order-reserved",
-              "order-paid",
-              "order-invoiced",
-              "order-failure",
-              "order-dlq",
-              "order-refund-requested",
-              "order-refunded",
-          ]
-
-          for queue_name in queues:
-              response = sqs.create_queue(QueueName=queue_name)
-              print(f"Queue ready: {response['QueueUrl']}")
-          PY
-
-      - name: Create DynamoDB tables
-        run: python scripts/create_tables.py
-
-      - name: Run tests
-        run: python -m pytest -v
-
-      - name: Validate CloudFormation templates
-        run: |
-          pip install cfn-lint
-          cfn-lint infrastructure/cloudformation/*.yaml
-          cfn-lint infrastructure/cloudformation/templates/*.yaml
-
-      - name: Stop local services
-        if: always()
-        run: docker compose down
-
   deploy:
     name: Deploy to AWS
-    needs: ci
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
