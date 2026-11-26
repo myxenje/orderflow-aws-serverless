@@ -50,7 +50,6 @@ jobs:
 
             docker push "${ECR_URI}:${IMAGE_TAG}-${FUNCTION}"
           done
-
       - name: Package CloudFormation templates
         run: |
           aws cloudformation package \
@@ -58,7 +57,6 @@ jobs:
             --s3-bucket "${TEMPLATE_BUCKET}" \
             --s3-prefix orderflow \
             --output-template-file packaged.yaml
-
       - name: Deploy CloudFormation stack
         run: |
           aws cloudformation deploy \
