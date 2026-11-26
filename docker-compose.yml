@@ -10,6 +10,8 @@ services:
   sqs-local:
     image: softwaremill/elasticmq-native:latest
     container_name: orderflow-sqs
+    volumes:
+      - ./infrastructure/local/elasticmq.conf:/opt/elasticmq.conf:ro
     ports:
       - "9324:9324"
       - "9325:9325"
