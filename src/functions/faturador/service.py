@@ -2,10 +2,25 @@ import json
 from uuid import uuid4
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
-from src.shared.database.dynamodb import (
-    get_dynamodb_resource,
-    get_dynamodb_client,
-)
+from src.shared.database.dynamodb import (get_dynamodb_resource, get_dynamodb_client,)
+from src.shared.events.sqs import send_message
+from src.shared.config.settings import SQS_ORDER_INVOICED_QUEUE_URL
+
+
+def _publish_invoiced_event(outbox_table, invoiced_event_id):
+    response = outbox_table.get_item(
+        Key={"event_id": invoiced_event_id}
+    )
+
+    outbox_event = response.get("Item")
+
+    if not outbox_event:
+        raise ValueError("Evento ORDER_INVOICED não encontrado na Outbox.")
+
+    send_message(
+        queue_url=SQS_ORDER_INVOICED_QUEUE_URL,
+        message_body=outbox_event["payload"],
+    )
 
 
 def generate_invoice(event):
@@ -25,23 +40,29 @@ def generate_invoice(event):
 
     invoices_table = dynamodb.Table("Invoices")
     processed_table = dynamodb.Table("ProcessedEvents")
+    outbox_table = dynamodb.Table("Outbox")
 
     consumer_name = "faturador"
     consumer_event_id = f"{consumer_name}#{event_id}"
 
-    # 1. Verifica se o evento já foi processado
     processed_response = processed_table.get_item(
         Key={"consumer_event_id": consumer_event_id}
     )
 
     if "Item" in processed_response:
+        processed_item = processed_response["Item"]
+
+        _publish_invoiced_event(
+            outbox_table,
+            processed_item["invoiced_event_id"],
+        )
+
         return {
             "message": "Evento já processado.",
             "status": "INVOICED",
-            "invoice_id": processed_response["Item"].get("invoice_id")
+            "invoice_id": processed_item.get("invoice_id"),
         }
 
-    # 2. Verifica se o pedido já possui uma fatura
     invoice_response = invoices_table.get_item(
         Key={"order_id": order_id}
     )
@@ -49,7 +70,6 @@ def generate_invoice(event):
     if "Item" in invoice_response:
         raise ValueError("Pedido já possui uma fatura.")
 
-    # 3. Valida os dados necessários para faturamento
     customer_id = event.get("customer_id")
     total_amount = event.get("total_amount")
     payment_id = event.get("payment_id")
@@ -65,20 +85,7 @@ def generate_invoice(event):
 
     created_at = datetime.now(timezone.utc).isoformat()
 
-    # 4. Gera a fatura
     invoice_id = str(uuid4())
-
-    invoice = {
-        "invoice_id": invoice_id,
-        "order_id": order_id,
-        "customer_id": customer_id,
-        "payment_id": payment_id,
-        "total_amount": str(total_amount),
-        "status": "ISSUED",
-        "created_at": created_at
-    }
-
-    # 5. Prepara o evento ORDER_INVOICED
     invoiced_event_id = str(uuid4())
 
     invoiced_event = {
@@ -90,21 +97,11 @@ def generate_invoice(event):
         "payment_id": payment_id,
         "total_amount": str(total_amount),
         "status": "INVOICED",
-        "created_at": created_at
-    }
-
-    outbox_event = {
-        "event_id": invoiced_event_id,
-        "event_type": "ORDER_INVOICED",
-        "payload": json.dumps(invoiced_event),
-        "status": "PENDING",
-        "created_at": created_at
+        "created_at": created_at,
     }
 
     client = get_dynamodb_client()
 
-    # 6. Persiste a fatura, a idempotência
-    # e o evento de saída atomicamente
     try:
         client.transact_write_items(
             TransactItems=[
@@ -116,15 +113,13 @@ def generate_invoice(event):
                             "invoice_id": {"S": invoice_id},
                             "customer_id": {"S": customer_id},
                             "payment_id": {"S": payment_id},
-                            "total_amount": {
-                                "S": str(total_amount)
-                            },
+                            "total_amount": {"S": str(total_amount)},
                             "status": {"S": "ISSUED"},
-                            "created_at": {"S": created_at}
+                            "created_at": {"S": created_at},
                         },
                         "ConditionExpression": (
                             "attribute_not_exists(order_id)"
-                        )
+                        ),
                     }
                 },
                 {
@@ -139,11 +134,14 @@ def generate_invoice(event):
                             },
                             "event_id": {"S": event_id},
                             "invoice_id": {"S": invoice_id},
-                            "processed_at": {"S": created_at}
+                            "invoiced_event_id": {
+                                "S": invoiced_event_id
+                            },
+                            "processed_at": {"S": created_at},
                         },
                         "ConditionExpression": (
                             "attribute_not_exists(consumer_event_id)"
-                        )
+                        ),
                     }
                 },
                 {
@@ -156,42 +154,46 @@ def generate_invoice(event):
                                 "S": json.dumps(invoiced_event)
                             },
                             "status": {"S": "PENDING"},
-                            "created_at": {"S": created_at}
+                            "created_at": {"S": created_at},
                         },
                         "ConditionExpression": (
                             "attribute_not_exists(event_id)"
-                        )
+                        ),
                     }
-                }
+                },
             ]
         )
+
+        _publish_invoiced_event(outbox_table, invoiced_event_id)
 
         return {
             "message": "Fatura gerada com sucesso.",
             "status": "INVOICED",
-            "invoice_id": invoice_id
+            "invoice_id": invoice_id,
         }
 
     except ClientError as error:
         error_code = error.response["Error"]["Code"]
 
         if error_code == "TransactionCanceledException":
-
-            # 7. Verifica se o mesmo evento já foi processado
             processed_response = processed_table.get_item(
                 Key={"consumer_event_id": consumer_event_id}
             )
 
             if "Item" in processed_response:
+                processed_item = processed_response["Item"]
+
+                _publish_invoiced_event(
+                    outbox_table,
+                    processed_item["invoiced_event_id"],
+                )
+
                 return {
                     "message": "Evento já processado.",
                     "status": "INVOICED",
-                    "invoice_id": processed_response["Item"].get(
-                        "invoice_id"
-                    )
+                    "invoice_id": processed_item.get("invoice_id"),
                 }
 
-            # 8. Verifica se outro evento já gerou a fatura
             latest_invoice = invoices_table.get_item(
                 Key={"order_id": order_id}
             ).get("Item")

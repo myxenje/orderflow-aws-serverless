@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
 IS_LOCAL = ENVIRONMENT == "development"
@@ -54,4 +54,8 @@ SQS_ORDER_REFUND_REQUESTED_QUEUE_URL = os.getenv(
 
 SQS_ORDER_REFUNDED_QUEUE_URL = os.getenv(
     "SQS_ORDER_REFUNDED_QUEUE_URL"
+)
+
+SQS_ORDER_FAILURE_QUEUE_URL = os.getenv(
+    "SQS_ORDER_FAILURE_QUEUE_URL"
 )

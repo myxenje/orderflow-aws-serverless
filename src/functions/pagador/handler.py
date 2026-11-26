@@ -1,13 +1,11 @@
 import json
-from src.functions.pagador.service import process_payment
+from src.functions.pagador.service import (process_payment, publish_payment_failure,)
 
 
 def lambda_handler(event, context):
-    records = event.get("Records", [])
-
     batch_item_failures = []
 
-    for record in records:
+    for record in event.get("Records", []):
         message_id = record.get("messageId")
 
         try:
@@ -23,7 +21,16 @@ def lambda_handler(event, context):
                     "Tipo de evento não suportado."
                 )
 
-            process_payment(body)
+            try:
+                process_payment(body)
+
+            except Exception as error:
+                print(
+                    f"Falha no pagamento do pedido "
+                    f"{body.get('order_id')}: {error}"
+                )
+
+                publish_payment_failure(body, error)
 
         except Exception as error:
             print(

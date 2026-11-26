@@ -3,6 +3,41 @@ from uuid import uuid4
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 from src.shared.database.dynamodb import (get_dynamodb_resource, get_dynamodb_client,)
+from src.shared.events.sqs import send_message
+from src.shared.config.settings import (SQS_ORDER_PAID_QUEUE_URL, SQS_ORDER_FAILURE_QUEUE_URL,)
+
+def publish_payment_failure(event, error):
+    failure_event = {
+        **event,
+        "event_type": "ORDER_PAYMENT_FAILED",
+        "failure_reason": str(error),
+        "failed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    send_message(
+        queue_url=SQS_ORDER_FAILURE_QUEUE_URL,
+        message_body=json.dumps(failure_event),
+    )
+
+    print(
+        f"Falha no pagamento do pedido "
+        f"{event.get('order_id')} publicada na order-failure."
+    )
+
+def _publish_paid_event(outbox_table, paid_event_id):
+    response = outbox_table.get_item(
+        Key={"event_id": paid_event_id}
+    )
+
+    outbox_event = response.get("Item")
+
+    if not outbox_event:
+        raise ValueError("Evento ORDER_PAID não encontrado na Outbox.")
+
+    send_message(
+        queue_url=SQS_ORDER_PAID_QUEUE_URL,
+        message_body=outbox_event["payload"],
+    )
 
 
 def process_payment(event):
@@ -19,24 +54,29 @@ def process_payment(event):
 
     orders_table = dynamodb.Table("Orders")
     processed_table = dynamodb.Table("ProcessedEvents")
+    outbox_table = dynamodb.Table("Outbox")
 
     consumer_name = "pagador"
     consumer_event_id = f"{consumer_name}#{event_id}"
 
-
-    # 1. Verifica se o evento já foi processado
     processed_response = processed_table.get_item(
         Key={"consumer_event_id": consumer_event_id}
     )
 
     if "Item" in processed_response:
+        processed_item = processed_response["Item"]
+
+        _publish_paid_event(
+            outbox_table,
+            processed_item["paid_event_id"],
+        )
+
         return {
             "message": "Evento já processado.",
             "status": "PAID",
-            "payment_id": processed_response["Item"].get("payment_id")
+            "payment_id": processed_item.get("payment_id"),
         }
 
-    # 2. Busca o pedido
     response = orders_table.get_item(
         Key={"order_id": order_id}
     )
@@ -47,20 +87,14 @@ def process_payment(event):
         raise ValueError("Pedido não encontrado.")
 
     if order["status"] == "PAID":
-        raise ValueError(
-            "Pedido já foi pago por outro evento."
-        )
+        raise ValueError("Pedido já foi pago por outro evento.")
 
     if order["status"] != "RESERVED":
-        raise ValueError(
-            "Pedido não está disponível para pagamento."
-        )
+        raise ValueError("Pedido não está disponível para pagamento.")
 
     processed_at = datetime.now(timezone.utc).isoformat()
 
-    # 3. Simula a aprovação do pagamento
     payment_id = str(uuid4())
-
     paid_event_id = str(uuid4())
 
     paid_event = {
@@ -71,21 +105,11 @@ def process_payment(event):
         "total_amount": str(order["total_amount"]),
         "payment_id": payment_id,
         "status": "PAID",
-        "paid_at": processed_at
-    }
-
-    outbox_event = {
-        "event_id": paid_event_id,
-        "event_type": "ORDER_PAID",
-        "payload": json.dumps(paid_event),
-        "status": "PENDING",
-        "created_at": processed_at
+        "paid_at": processed_at,
     }
 
     client = get_dynamodb_client()
 
-    # 4. Atualiza o pedido, registra idempotência
-    # e cria o evento ORDER_PAID atomicamente
     try:
         client.transact_write_items(
             TransactItems=[
@@ -108,8 +132,8 @@ def process_payment(event):
                             ":status": {"S": "PAID"},
                             ":reserved": {"S": "RESERVED"},
                             ":payment_id": {"S": payment_id},
-                            ":paid_at": {"S": processed_at}
-                        }
+                            ":paid_at": {"S": processed_at},
+                        },
                     }
                 },
                 {
@@ -125,16 +149,19 @@ def process_payment(event):
                             "event_id": {
                                 "S": event_id
                             },
-                             "payment_id": {
+                            "payment_id": {
                                 "S": payment_id
+                            },
+                            "paid_event_id": {
+                                "S": paid_event_id
                             },
                             "processed_at": {
                                 "S": processed_at
-                            }
+                            },
                         },
                         "ConditionExpression": (
                             "attribute_not_exists(consumer_event_id)"
-                        )
+                        ),
                     }
                 },
                 {
@@ -155,40 +182,49 @@ def process_payment(event):
                             },
                             "created_at": {
                                 "S": processed_at
-                            }
+                            },
                         },
                         "ConditionExpression": (
                             "attribute_not_exists(event_id)"
-                        )
+                        ),
                     }
-                }
+                },
             ]
         )
+
+        # 5. Publica diretamente na fila order-paid
+        _publish_paid_event(outbox_table, paid_event_id)
 
         return {
             "message": "Pagamento processado com sucesso.",
             "status": "PAID",
-            "payment_id": payment_id
+            "payment_id": payment_id,
         }
 
     except ClientError as error:
         error_code = error.response["Error"]["Code"]
 
         if error_code == "TransactionCanceledException":
-
-            # 5. Verifica se outra execução processou o mesmo evento
+            # 6. Verifica se outra execução processou o mesmo evento
             processed_response = processed_table.get_item(
                 Key={"consumer_event_id": consumer_event_id}
             )
 
             if "Item" in processed_response:
+                processed_item = processed_response["Item"]
+
+                _publish_paid_event(
+                    outbox_table,
+                    processed_item["paid_event_id"],
+                )
+
                 return {
                     "message": "Evento já processado.",
                     "status": "PAID",
-                    "payment_id": processed_response["Item"].get("payment_id")
+                    "payment_id": processed_item.get("payment_id"),
                 }
 
-            # 6. Verifica se outro evento pagou o pedido
+            # 7. Verifica se outro evento pagou o pedido
             latest_order = orders_table.get_item(
                 Key={"order_id": order_id}
             ).get("Item")

@@ -1,17 +1,30 @@
-from src.functions.coletor.service import publish_pending_events
+from src.functions.coletor.service import publish_stream_events
+
 
 def lambda_handler(event, context):
-    try:
-        published_count = publish_pending_events()
+    batch_item_failures = []
 
-        return {
-            "statusCode": 200,
-            "body": {
-                "message": "Eventos pendentes processados.",
-                "published_count": published_count
-            }
-        }
+    for record in event.get("Records", []):
+        try:
+            publish_stream_events(record)
 
-    except Exception as error:
-        print(f"Erro no Coletor: {str(error)}")
-        raise
+        except Exception as error:
+            sequence_number = record.get(
+                "dynamodb", {}
+            ).get("SequenceNumber")
+
+            print(
+                f"Erro ao processar registro "
+                f"{sequence_number}: {str(error)}"
+            )
+
+            if sequence_number:
+                batch_item_failures.append({
+                    "itemIdentifier": sequence_number
+                })
+            else:
+                raise
+
+    return {
+        "batchItemFailures": batch_item_failures
+    }

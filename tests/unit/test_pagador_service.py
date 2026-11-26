@@ -1,3 +1,4 @@
+import json
 from unittest.mock import MagicMock
 import pytest
 from src.functions.pagador.service import process_payment
@@ -8,27 +9,42 @@ def dynamodb_mocks(monkeypatch):
     resource = MagicMock()
     orders_table = MagicMock()
     processed_table = MagicMock()
+    outbox_table = MagicMock()
     client = MagicMock()
+    send_message_mock = MagicMock()
 
     resource.Table.side_effect = lambda name: {
         "Orders": orders_table,
         "ProcessedEvents": processed_table,
+        "Outbox": outbox_table,
     }[name]
 
     monkeypatch.setattr(
         "src.functions.pagador.service.get_dynamodb_resource",
-        lambda: resource
+        lambda: resource,
     )
 
     monkeypatch.setattr(
         "src.functions.pagador.service.get_dynamodb_client",
-        lambda: client
+        lambda: client,
+    )
+
+    monkeypatch.setattr(
+        "src.functions.pagador.service.send_message",
+        send_message_mock,
+    )
+
+    monkeypatch.setattr(
+        "src.functions.pagador.service.SQS_ORDER_PAID_QUEUE_URL",
+        "https://sqs.us-east-1.amazonaws.com/123456789012/order-paid",
     )
 
     return {
         "orders": orders_table,
         "processed": processed_table,
+        "outbox": outbox_table,
         "client": client,
+        "send_message": send_message_mock,
     }
 
 
@@ -56,9 +72,21 @@ def test_process_payment_success(
 ):
     mocks = dynamodb_mocks
 
+    paid_payload = {
+        "event_id": "paid-event-001",
+        "event_type": "ORDER_PAID",
+        "order_id": "order-001",
+    }
+
     mocks["processed"].get_item.return_value = {}
     mocks["orders"].get_item.return_value = {
         "Item": reserved_order
+    }
+    mocks["outbox"].get_item.return_value = {
+        "Item": {
+            "event_id": "paid-event-001",
+            "payload": json.dumps(paid_payload),
+        }
     }
 
     result = process_payment(valid_event)
@@ -77,6 +105,16 @@ def test_process_payment_success(
     assert transaction[0]["Update"]["TableName"] == "Orders"
     assert transaction[1]["Put"]["TableName"] == "ProcessedEvents"
     assert transaction[2]["Put"]["TableName"] == "Outbox"
+
+    processed_item = transaction[1]["Put"]["Item"]
+    assert processed_item["paid_event_id"]["S"]
+
+    mocks["outbox"].get_item.assert_called_once()
+    mocks["send_message"].assert_called_once()
+
+    send_args = mocks["send_message"].call_args.kwargs
+    assert send_args["queue_url"].endswith("/order-paid")
+    assert json.loads(send_args["message_body"]) == paid_payload
 
 
 def test_process_payment_without_event_id(
@@ -106,10 +144,24 @@ def test_process_payment_duplicate_event(
 ):
     mocks = dynamodb_mocks
 
+    paid_payload = {
+        "event_id": "paid-event-001",
+        "event_type": "ORDER_PAID",
+        "order_id": "order-001",
+    }
+
     mocks["processed"].get_item.return_value = {
         "Item": {
             "consumer_event_id": "pagador#event-001",
-            "payment_id": "payment-001"
+            "payment_id": "payment-001",
+            "paid_event_id": "paid-event-001",
+        }
+    }
+
+    mocks["outbox"].get_item.return_value = {
+        "Item": {
+            "event_id": "paid-event-001",
+            "payload": json.dumps(paid_payload),
         }
     }
 
@@ -121,6 +173,10 @@ def test_process_payment_duplicate_event(
 
     mocks["orders"].get_item.assert_not_called()
     mocks["client"].transact_write_items.assert_not_called()
+    mocks["outbox"].get_item.assert_called_once_with(
+        Key={"event_id": "paid-event-001"}
+    )
+    mocks["send_message"].assert_called_once()
 
 
 def test_process_payment_order_not_found(
@@ -135,6 +191,7 @@ def test_process_payment_order_not_found(
         process_payment(valid_event)
 
     mocks["client"].transact_write_items.assert_not_called()
+    mocks["send_message"].assert_not_called()
 
 
 def test_process_payment_already_paid(
@@ -146,13 +203,13 @@ def test_process_payment_already_paid(
     mocks["orders"].get_item.return_value = {
         "Item": {
             "order_id": "order-001",
-            "status": "PAID"
+            "status": "PAID",
         }
     }
 
     with pytest.raises(
         ValueError,
-        match="pago por outro evento"
+        match="pago por outro evento",
     ):
         process_payment(valid_event)
 
@@ -168,13 +225,13 @@ def test_process_payment_invalid_status(
     mocks["orders"].get_item.return_value = {
         "Item": {
             "order_id": "order-001",
-            "status": "PENDING"
+            "status": "PENDING",
         }
     }
 
     with pytest.raises(
         ValueError,
-        match="não está disponível para pagamento"
+        match="não está disponível para pagamento",
     ):
         process_payment(valid_event)
 
