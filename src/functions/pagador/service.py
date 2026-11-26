@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 from src.shared.database.dynamodb import (get_dynamodb_resource, get_dynamodb_client,)
 from src.shared.events.sqs import send_message
+from decimal import Decimal
 from src.shared.config.settings import (SQS_ORDER_PAID_QUEUE_URL, SQS_ORDER_FAILURE_QUEUE_URL,)
 
 def publish_payment_failure(event, error):
@@ -38,7 +39,6 @@ def _publish_paid_event(outbox_table, paid_event_id):
         queue_url=SQS_ORDER_PAID_QUEUE_URL,
         message_body=outbox_event["payload"],
     )
-
 
 def process_payment(event):
     event_id = event.get("event_id")
@@ -92,6 +92,39 @@ def process_payment(event):
     if order["status"] != "RESERVED":
         raise ValueError("Pedido não está disponível para pagamento.")
 
+    items = order.get("items")
+
+    if not isinstance(items, list) or not items:
+        raise ValueError("Pedido não possui produtos válidos.")
+
+    stock_quantities = {}
+
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError("Item do pedido inválido.")
+
+        product_id = item.get("product_id")
+        quantity = item.get("quantity")
+
+        if not isinstance(product_id, str) or not product_id:
+            raise ValueError("product_id inválido.")
+
+        if (
+            isinstance(quantity, bool)
+            or not isinstance(quantity, (int, Decimal))
+            or quantity <= 0
+            or quantity % 1 != 0
+        ):
+            raise ValueError(
+                f"Quantidade inválida para o produto {product_id}."
+            )
+
+        quantity = int(quantity)
+
+        stock_quantities[product_id] = (
+            stock_quantities.get(product_id, 0) + quantity
+        )
+
     processed_at = datetime.now(timezone.utc).isoformat()
 
     payment_id = str(uuid4())
@@ -107,6 +140,28 @@ def process_payment(event):
         "status": "PAID",
         "paid_at": processed_at,
     }
+
+    stock_updates = []
+
+    for product_id, quantity in stock_quantities.items():
+        stock_updates.append({
+            "Update": {
+                "TableName": "Stock",
+                "Key": {
+                    "product_id": {"S": product_id}
+                },
+                "UpdateExpression": (
+                    "SET quantity = quantity - :quantity"
+                ),
+                "ConditionExpression": (
+                    "attribute_exists(product_id) "
+                    "AND quantity >= :quantity"
+                ),
+                "ExpressionAttributeValues": {
+                    ":quantity": {"N": str(quantity)}
+                },
+            }
+        })
 
     client = get_dynamodb_client()
 
@@ -136,6 +191,7 @@ def process_payment(event):
                         },
                     }
                 },
+                *stock_updates,
                 {
                     "Put": {
                         "TableName": "ProcessedEvents",
@@ -192,7 +248,6 @@ def process_payment(event):
             ]
         )
 
-        # 5. Publica diretamente na fila order-paid
         _publish_paid_event(outbox_table, paid_event_id)
 
         return {
@@ -205,7 +260,6 @@ def process_payment(event):
         error_code = error.response["Error"]["Code"]
 
         if error_code == "TransactionCanceledException":
-            # 6. Verifica se outra execução processou o mesmo evento
             processed_response = processed_table.get_item(
                 Key={"consumer_event_id": consumer_event_id}
             )
@@ -224,7 +278,6 @@ def process_payment(event):
                     "payment_id": processed_item.get("payment_id"),
                 }
 
-            # 7. Verifica se outro evento pagou o pedido
             latest_order = orders_table.get_item(
                 Key={"order_id": order_id}
             ).get("Item")

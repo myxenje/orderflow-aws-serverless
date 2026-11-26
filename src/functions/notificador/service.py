@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from botocore.exceptions import ClientError
 from src.shared.database.dynamodb import get_dynamodb_resource
+from src.shared.events.sns import publish_notification
 
 
 def notify_customer(event):
@@ -31,7 +32,6 @@ def notify_customer(event):
 
     consumer_event_id = f"notificador#{event_id}"
 
-    # Verifica se o evento já foi processado
     existing_event = processed_events.get_item(
         Key={"consumer_event_id": consumer_event_id}
     ).get("Item")
@@ -70,11 +70,26 @@ def notify_customer(event):
 
         raise
 
-    print(
-        f"Notificação simulada com sucesso para o cliente "
-        f"{customer_id}, pedido {order_id}."
+    subject = f"Pedido {order_id} faturado com sucesso"
+
+    message = (
+        f"Seu pedido foi faturado!\n\n"
+        f"Pedido: {order_id}\n"
+        f"Cliente: {customer_id}\n"
+        f"Nota fiscal: {invoice_id}\n"
+        f"Status: Faturado"
     )
 
+    publish_notification(
+        subject=subject,
+        message=message,
+    )
+
+    print(
+        f"Notificacao SNS publicada para o cliente "
+        f"{customer_id}, pedido {order_id}."
+    )
+    
     return {
         "status": "SENT",
         "order_id": order_id,
