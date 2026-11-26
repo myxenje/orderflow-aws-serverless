@@ -28,7 +28,6 @@ jobs:
       AWS_DEFAULT_REGION: us-east-1
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
-
       DYNAMODB_ENDPOINT: http://localhost:8000
 
       SQS_ORDER_CREATED_QUEUE_URL: http://localhost:9324/000000000000/order-processing
@@ -70,9 +69,7 @@ jobs:
           for name, port in services.items():
               for attempt in range(30):
                   try:
-                      with socket.create_connection(
-                          ("localhost", port), timeout=2
-                      ):
+                      with socket.create_connection(("localhost", port), timeout=2):
                           print(f"{name} is ready.")
                           break
                   except OSError:
@@ -106,11 +103,12 @@ jobs:
           ]
 
           for queue_name in queues:
-              response = sqs.create_queue(
-                  QueueName=queue_name
-              )
+              response = sqs.create_queue(QueueName=queue_name)
               print(f"Queue ready: {response['QueueUrl']}")
           PY
+
+      - name: Create DynamoDB tables
+        run: python scripts/create_tables.py
 
       - name: Run tests
         run: python -m pytest -v
