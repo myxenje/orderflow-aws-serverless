@@ -1,29 +1,42 @@
 import json
 import pytest
-
 from uuid import uuid4
 from boto3.dynamodb.conditions import Attr
-
 from src.functions.cadastrador.service import create_order
 from src.functions.reservador.service import reserve_order
 from src.functions.pagador.service import process_payment
 from src.shared.database.dynamodb import get_dynamodb_resource
 
 
+def create_stock_product(product_id, quantity=10):
+    dynamodb = get_dynamodb_resource()
+    stock_table = dynamodb.Table("Stock")
+
+    stock_table.put_item(
+        Item={
+            "product_id": product_id,
+            "quantity": quantity,
+        }
+    )
+
+
 def create_reserved_order():
-    # 1. Cria um pedido
+    product_id = "product-payment-001"
+
+    # Garante que o produto exista e tenha estoque disponível.
+    create_stock_product(product_id, quantity=10)
+
     order = create_order({
         "customer_id": f"customer-{uuid4()}",
         "items": [
             {
-                "product_id": "product-payment-001",
+                "product_id": product_id,
                 "quantity": 2,
                 "unit_price": "50.00"
             }
         ]
     })
 
-    # 2. Reserva o pedido
     event = {
         "event_id": str(uuid4()),
         "event_type": "ORDER_CREATED",
@@ -38,20 +51,17 @@ def create_reserved_order():
 def test_process_payment_success():
     order = create_reserved_order()
 
-    # 1. Cria evento ORDER_RESERVED
     event = {
         "event_id": str(uuid4()),
         "event_type": "ORDER_RESERVED",
         "order_id": order["order_id"]
     }
 
-    # 2. Processa o pagamento
     result = process_payment(event)
 
     assert result["status"] == "PAID"
     assert "payment_id" in result
 
-    # 3. Verifica atualização do pedido
     dynamodb = get_dynamodb_resource()
 
     orders_table = dynamodb.Table("Orders")
@@ -66,7 +76,6 @@ def test_process_payment_success():
     assert saved_order["payment_id"] == result["payment_id"]
     assert "paid_at" in saved_order
 
-    # 4. Verifica idempotência
     processed_table = dynamodb.Table("ProcessedEvents")
 
     processed_response = processed_table.get_item(
@@ -77,7 +86,7 @@ def test_process_payment_success():
 
     assert "Item" in processed_response
 
-    # 5. Verifica evento ORDER_PAID na Outbox
+    # Verifica evento ORDER_PAID na Outbox.
     outbox_table = dynamodb.Table("Outbox")
 
     outbox_response = outbox_table.scan(
@@ -135,19 +144,19 @@ def test_different_event_cannot_pay_already_paid_order():
         "order_id": order["order_id"]
     }
 
-    # Primeiro evento processa o pagamento
+    # Primeiro evento processa o pagamento.
     first_result = process_payment(first_event)
 
     assert first_result["status"] == "PAID"
 
-    # Segundo evento deve ser rejeitado
+    # Segundo evento deve ser rejeitado.
     with pytest.raises(
         ValueError,
         match="Pedido já foi pago por outro evento."
     ):
         process_payment(second_event)
 
-    # Confirma que o segundo evento não foi registrado
+    # Confirma que o segundo evento não foi registrado.
     dynamodb = get_dynamodb_resource()
 
     processed_table = dynamodb.Table("ProcessedEvents")

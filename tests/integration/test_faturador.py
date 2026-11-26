@@ -9,20 +9,37 @@ from src.functions.faturador.service import generate_invoice
 from src.shared.database.dynamodb import get_dynamodb_resource
 
 
+def create_stock_product(product_id, quantity=10):
+    dynamodb = get_dynamodb_resource()
+    stock_table = dynamodb.Table("Stock")
+
+    stock_table.put_item(
+        Item={
+            "product_id": product_id,
+            "quantity": quantity,
+        }
+    )
+
+
 def create_paid_order():
-    # 1. Cria um pedido
+    product_id = "product-invoice-001"
+
+    # 1. Cadastra o produto no estoque.
+    create_stock_product(product_id, quantity=10)
+
+    # 2. Cria um pedido.
     order = create_order({
         "customer_id": f"customer-{uuid4()}",
         "items": [
             {
-                "product_id": "product-invoice-001",
+                "product_id": product_id,
                 "quantity": 2,
                 "unit_price": "50.00"
             }
         ]
     })
 
-    # 2. Reserva o pedido
+    # 3. Reserva o pedido.
     reserve_event = {
         "event_id": str(uuid4()),
         "event_type": "ORDER_CREATED",
@@ -31,7 +48,7 @@ def create_paid_order():
 
     reserve_order(reserve_event)
 
-    # 3. Processa o pagamento
+    # 4. Processa o pagamento.
     payment_event = {
         "event_id": str(uuid4()),
         "event_type": "ORDER_RESERVED",
@@ -40,7 +57,7 @@ def create_paid_order():
 
     process_payment(payment_event)
 
-    # 4. Recupera o evento ORDER_PAID gerado pelo Pagador
+    # 5. Recupera o evento ORDER_PAID gerado pelo Pagador.
     dynamodb = get_dynamodb_resource()
     outbox_table = dynamodb.Table("Outbox")
 
@@ -63,7 +80,7 @@ def create_paid_order():
 def test_generate_invoice_success():
     order, event = create_paid_order()
 
-    # 1. Gera a fatura
+    # 1. Gera a fatura.
     result = generate_invoice(event)
 
     assert result["status"] == "INVOICED"
@@ -71,7 +88,7 @@ def test_generate_invoice_success():
 
     dynamodb = get_dynamodb_resource()
 
-    # 2. Verifica a fatura
+    # 2. Verifica a fatura.
     invoices_table = dynamodb.Table("Invoices")
 
     response = invoices_table.get_item(
@@ -87,7 +104,7 @@ def test_generate_invoice_success():
     assert invoice["status"] == "ISSUED"
     assert "created_at" in invoice
 
-    # 3. Verifica o registro de idempotência
+    # 3. Verifica o registro de idempotência.
     processed_table = dynamodb.Table("ProcessedEvents")
 
     processed_response = processed_table.get_item(
@@ -104,7 +121,7 @@ def test_generate_invoice_success():
         == result["invoice_id"]
     )
 
-    # 4. Verifica o evento ORDER_INVOICED na Outbox
+    # 4. Verifica o evento ORDER_INVOICED na Outbox.
     outbox_table = dynamodb.Table("Outbox")
 
     outbox_response = outbox_table.scan(
@@ -158,12 +175,12 @@ def test_generate_invoice_duplicate_event():
 def test_different_event_cannot_generate_second_invoice():
     order, first_event = create_paid_order()
 
-    # Primeiro evento gera a fatura
+    # Primeiro evento gera a fatura.
     first_result = generate_invoice(first_event)
 
     assert first_result["status"] == "INVOICED"
 
-    # Segundo evento tenta faturar o mesmo pedido
+    # Segundo evento tenta faturar o mesmo pedido.
     second_event = {
         **first_event,
         "event_id": str(uuid4())
@@ -175,7 +192,7 @@ def test_different_event_cannot_generate_second_invoice():
     ):
         generate_invoice(second_event)
 
-    # Confirma que o segundo evento não foi processado
+    # Confirma que o segundo evento não foi processado.
     dynamodb = get_dynamodb_resource()
 
     processed_table = dynamodb.Table("ProcessedEvents")
@@ -190,11 +207,14 @@ def test_different_event_cannot_generate_second_invoice():
 
     assert "Item" not in response
 
-    # Confirma que existe somente uma fatura para o pedido
+    # Confirma que existe somente uma fatura para o pedido.
     invoices_table = dynamodb.Table("Invoices")
 
     invoice_response = invoices_table.get_item(
         Key={"order_id": order["order_id"]}
     )
 
-    assert invoice_response["Item"]["invoice_id"] == first_result["invoice_id"]
+    assert (
+        invoice_response["Item"]["invoice_id"]
+        == first_result["invoice_id"]
+    )

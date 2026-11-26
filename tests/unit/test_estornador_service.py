@@ -51,8 +51,14 @@ def paid_order():
         "total_amount": "100.00",
         "payment_id": "payment-001",
         "status": "PAID",
+        "items": [
+            {
+                "product_id": "product-001",
+                "quantity": 2,
+                "unit_price": "50.00",
+            }
+        ],
     }
-
 
 def test_process_refund_success(
     dynamodb_mocks, valid_event, paid_order
@@ -74,10 +80,11 @@ def test_process_refund_success(
         "TransactItems"
     ]
 
-    assert len(transaction) == 3
+    assert len(transaction) == 4
     assert transaction[0]["Update"]["TableName"] == "Orders"
-    assert transaction[1]["Put"]["TableName"] == "ProcessedEvents"
-    assert transaction[2]["Put"]["TableName"] == "Outbox"
+    assert transaction[1]["Update"]["TableName"] == "Stock"
+    assert transaction[2]["Put"]["TableName"] == "ProcessedEvents"
+    assert transaction[3]["Put"]["TableName"] == "Outbox"
 
     assert (
         transaction[0]["Update"]["ExpressionAttributeValues"][":status"]["S"]
@@ -85,7 +92,7 @@ def test_process_refund_success(
     )
 
     assert (
-        transaction[2]["Put"]["Item"]["event_type"]["S"]
+        transaction[3]["Put"]["Item"]["event_type"]["S"]
         == "ORDER_REFUNDED"
     )
 

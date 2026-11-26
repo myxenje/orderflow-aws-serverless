@@ -64,8 +64,14 @@ def reserved_order():
         "customer_id": "customer-001",
         "total_amount": "100.00",
         "status": "RESERVED",
+        "items": [
+            {
+                "product_id": "product-001",
+                "quantity": 2,
+                "unit_price": "50.00",
+            }
+        ],
     }
-
 
 def test_process_payment_success(
     dynamodb_mocks, valid_event, reserved_order
@@ -101,12 +107,13 @@ def test_process_payment_success(
         "TransactItems"
     ]
 
-    assert len(transaction) == 3
+    assert len(transaction) == 4
     assert transaction[0]["Update"]["TableName"] == "Orders"
-    assert transaction[1]["Put"]["TableName"] == "ProcessedEvents"
-    assert transaction[2]["Put"]["TableName"] == "Outbox"
+    assert transaction[1]["Update"]["TableName"] == "Stock"
+    assert transaction[2]["Put"]["TableName"] == "ProcessedEvents"
+    assert transaction[3]["Put"]["TableName"] == "Outbox"
 
-    processed_item = transaction[1]["Put"]["Item"]
+    processed_item = transaction[2]["Put"]["Item"]
     assert processed_item["paid_event_id"]["S"]
 
     mocks["outbox"].get_item.assert_called_once()
