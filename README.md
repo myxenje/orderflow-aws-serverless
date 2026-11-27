@@ -211,11 +211,11 @@ Toda a infraestrutura é descrita em YAML e dividida em **nested stacks**, orque
 
 ## ⚙️ CI/CD com GitHub Actions
 
-O workflow [`deploy.yml`](.github/workflows/deploy.yml) (**OrderFlow CI/CD**) roda a cada `push` na branch `main` e também pode ser disparado manualmente (`workflow_dispatch`).
+O workflow [`deploy.yml`](.github/workflows/deploy.yml) (**OrderFlow CI/CD**) roda a cada `push` na branch `cicd-aws` e também pode ser disparado manualmente (`workflow_dispatch`).
 
 ```mermaid
 flowchart LR
-    A[push na main] --> B[Checkout]
+    A[push na cicd-aws] --> B[Checkout]
     B --> C["Credenciais AWS<br/>(OIDC)"]
     C --> D[Login no ECR]
     D --> E["Build e push<br/>das 7 imagens"]
@@ -456,7 +456,7 @@ aws cloudformation wait stack-delete-complete --stack-name orderflow-stack --reg
 ### Recriando
 
 1. No GitHub, abra **Actions → OrderFlow CI/CD**.
-2. Escolha a última execução e clique em **Re-run all jobs**, ou use **Run workflow** (disparo manual), ou faça um novo `push` na `main`.
+2. Escolha a última execução e clique em **Re-run all jobs**, ou use **Run workflow** (disparo manual), ou faça um novo `push` na `cicd-aws`.
 3. Aguarde o deploy terminar (a stack volta a `CREATE_COMPLETE`).
 
 Depois de recriar, lembre-se de que **tudo foi apagado junto**:
