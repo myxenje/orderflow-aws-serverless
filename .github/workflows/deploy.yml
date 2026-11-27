@@ -2,7 +2,7 @@ name: OrderFlow CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [cicd-aws]
   workflow_dispatch:
 
 permissions:
