@@ -40,7 +40,7 @@ API de processamento de pedidos construída em **Python** com serviços **server
 
 ## 🏗 Arquitetura
 
-![Arquitetura do OrderFlow](docs/images/arq-orderflow-aws)
+![Arquitetura do OrderFlow](docs/images/arq-orderflow-aws.png)
 
 Cada etapa do pedido é um **microsserviço independente** (uma Lambda), que consome uma fila, executa sua responsabilidade e publica o resultado na fila seguinte. Nenhuma Lambda chama outra diretamente: todo o acoplamento acontece por **eventos**. O diagrama em draw.io está em [`docs/images/arq-orderflow-aws.drawio`](docs/images/arq-orderflow-aws.drawio) e pode ser aberto em [app.diagrams.net](https://app.diagrams.net).
 
