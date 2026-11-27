@@ -3,6 +3,9 @@ name: OrderFlow CI/CD
 on:
   push:
     branches: [cicd-aws]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:
